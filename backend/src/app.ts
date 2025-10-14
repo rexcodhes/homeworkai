@@ -14,7 +14,7 @@ app.use(express.json());
 
 const apiRoutes = express.Router();
 
-apiRoutes.use("/api/v1", apiRoutes);
+app.use("/api/v1", apiRoutes);
 apiRoutes.use("/users", userRoutes);
 
 app.listen(PORT, () => {
