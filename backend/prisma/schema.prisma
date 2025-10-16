@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
- 
 }
 
 datasource db {
@@ -9,10 +8,65 @@ datasource db {
 }
 
 model User {
-  userId        Int @id @default(autoincrement())
-  name     String
-  email     String @unique
-  password String 
+  userId    Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
   createdAt DateTime @default(now())
- 
+
+  // Optional relation to uploads created by this user
+  uploads   Upload[]
+}
+
+enum UploadStatus {
+  uploading   // presign issued, not confirmed yet
+  uploaded    // HEAD confirmed in storage
+  processing  // parse job running (if you go async)
+  processed   // parse finished successfully
+  failed      // parse/validation failed
+}
+
+model Upload {
+  // Use string UUID so your API can return uploadId immediately
+  uploadId    String        @id @default(uuid())
+
+  // Ownership (optional now; wire when auth is ready)
+  user        User?         @relation(fields: [userId], references: [userId])
+  userId      Int?
+
+  // Storage locator
+  bucket      String
+  key         String
+
+  // Object metadata (filled on confirm)
+  size        Int?          // bytes; use BigInt? if you expect >2GB files
+  mime        String?
+  etag        String?
+  checksum    String?       // e.g., sha256 if you compute it
+
+  // Lifecycle + audit
+  status      UploadStatus  @default(uploading)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  confirmedAt DateTime?
+  processedAt DateTime?
+  error       String?       // last error message (if failed)
+
+  // Parse output (optional; one-to-one)
+  parseResult ParseResult?
+
+  @@unique([bucket, key])   // one object per bucket/key
+  @@index([userId])
+}
+
+model ParseResult {
+  id        String  @id @default(uuid())
+
+  // 1:1 with Upload; cascade delete if Upload is removed
+  upload    Upload  @relation(fields: [uploadId], references: [uploadId], onDelete: Cascade)
+  uploadId  String  @unique
+
+  text      String  // extracted text (Postgres text type)
+  numPages  Int?
+  createdAt DateTime @default(now())
 }

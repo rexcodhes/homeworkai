@@ -23,7 +23,11 @@ export async function createUser(req: Request, res: Response) {
     });
     return res
       .status(201)
-      .json({ userId: newUser.id, name: newUser.name, email: newUser.email });
+      .json({
+        userId: newUser.userId,
+        name: newUser.name,
+        email: newUser.email,
+      });
   } catch (error) {
     console.error("Create user failed:", error);
     return res.status(500).json({ error: (error as Error).message });

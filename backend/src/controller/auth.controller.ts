@@ -33,7 +33,7 @@ export async function login(req: Request, res: Response) {
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid password" });
     }
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, {
+    const token = jwt.sign({ userId: user.userId }, JWT_SECRET, {
       expiresIn: "1h",
     });
     return res.json({ token });
@@ -41,3 +41,4 @@ export async function login(req: Request, res: Response) {
     return res.status(500).json({ error: (error as Error).message });
   }
 }
+
