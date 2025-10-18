@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import userRoutes from "./routes/user.route";
 import parseRoutes from "./routes/parse.route";
 import uploadRoutes from "./routes/upload.route";
+import authRoutes from "./routes/auth.route";
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ const apiRoutes = express.Router();
 app.use("/api/v1", apiRoutes);
 
 apiRoutes.use("/users", userRoutes);
+apiRoutes.use("/auth", authRoutes);
 apiRoutes.use("/parse", parseRoutes);
 apiRoutes.use("/upload", uploadRoutes);
 

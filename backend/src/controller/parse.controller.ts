@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { parsePDF } from "../service/parse.service";
 import { prisma } from "../db/prisma";
+import { s3 } from "../config/storage";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { Readable } from "stream";
 
 export async function parsePDFController(req: Request, res: Response) {
   const uploadId = req.params.uploadId;
@@ -16,6 +19,27 @@ export async function parsePDFController(req: Request, res: Response) {
     });
     if (!upload) {
       return res.status(404).json({ error: "Upload not found" });
+    }
+
+    const command = new GetObjectCommand({
+      Bucket: upload.bucket,
+      Key: upload.key,
+    });
+
+    const response = await s3.send(command);
+    const body = response.Body;
+
+    if (body instanceof Readable) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of body) {
+        chunks.push(chunk as Buffer);
+      }
+      const buffer = Buffer.concat(chunks);
+      const pdfData = await parsePDF(buffer);
+
+      return res.json(pdfData);
+    } else {
+      return res.status(500).json({ error: "Failed to parse PDF" });
     }
   } catch (e) {
     return res.status(500).json({ error: "Failed to parse PDF" });
