@@ -1,13 +1,14 @@
 import { PDFParse } from "pdf-parse";
+import { ParsedResult } from "../types/parsedresult";
 
-export async function parsePDF(buffer: Buffer) {
+export async function parsePDF(buffer: Buffer): Promise<ParsedResult> {
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
-    const { text, pages } = result;
-    return { text, pages };
+    const { text } = result;
+    return { text };
   } catch (e) {
     console.log("Error parsing PDF");
-    return e;
+    throw new Error("Error parsing PDF");
   }
 }
