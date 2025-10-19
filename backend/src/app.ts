@@ -5,6 +5,8 @@ import userRoutes from "./routes/user.route";
 import parseRoutes from "./routes/parse.route";
 import uploadRoutes from "./routes/upload.route";
 import authRoutes from "./routes/auth.route";
+import analyzeRoutes from "./routes/analyze.route";
+import { authMiddleware } from "./middleware/auth.middleware";
 
 dotenv.config();
 
@@ -23,6 +25,7 @@ apiRoutes.use("/users", userRoutes);
 apiRoutes.use("/auth", authRoutes);
 apiRoutes.use("/parse", parseRoutes);
 apiRoutes.use("/upload", uploadRoutes);
+apiRoutes.use("/analyze", authMiddleware, analyzeRoutes);
 
 app.listen(PORT, () => {
   console.log("Server is running");

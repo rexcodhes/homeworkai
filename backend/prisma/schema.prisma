@@ -1,3 +1,4 @@
+// backend/prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -55,6 +56,9 @@ model Upload {
   // Parse output (optional; one-to-one)
   parseResult ParseResult?
 
+  // LLM analyses (optional; one-to-many)
+  analyses    AnalysisResult[]
+
   @@unique([bucket, key])   // one object per bucket/key
   @@index([userId])
 }
@@ -69,4 +73,46 @@ model ParseResult {
   text      String  // extracted text (Postgres text type)
   numPages  Int?
   createdAt DateTime @default(now())
+}
+
+enum AnalysisStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+model AnalysisResult {
+  id        String  @id @default(uuid())
+
+  // Many analyses can reference one Upload
+  upload    Upload  @relation(fields: [uploadId], references: [uploadId], onDelete: Cascade)
+  uploadId  String
+
+  // Prompt + model provenance (optional)
+  prompt    String?
+  model     String?
+
+  // LLM run state
+  status    AnalysisStatus @default(completed)
+  error     String?
+
+  // Slim JSON output from LLM
+  output    Json
+
+  // Optional token usage metrics
+  usagePromptTokens     Int?
+  usageCompletionTokens Int?
+  usageTotalTokens      Int?
+
+  // Optional: rendered solution PDF stored back to MinIO/S3
+  solutionBucket String?
+  solutionKey    String?
+  pages          Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([uploadId])
+  @@index([createdAt])
 }

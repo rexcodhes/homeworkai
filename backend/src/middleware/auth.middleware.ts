@@ -11,7 +11,7 @@ if (!JWT_SECRET) {
 
 export interface AuthenticatedRequest extends Request {
   user?: {
-    id: number;
+    userId: number;
   };
 }
 
@@ -31,12 +31,12 @@ export function authMiddleware(
     if (
       typeof payload !== "object" ||
       !payload ||
-      typeof (payload as any).id !== "number"
+      typeof (payload as any).userId !== "number"
     ) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    req.user = { id: (payload as any).id };
+    req.user = { userId: (payload as any).userId };
     return next();
   } catch (error) {
     return res.status(401).json({ error: "Unauthorized" });

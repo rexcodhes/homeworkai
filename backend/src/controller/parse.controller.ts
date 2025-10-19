@@ -37,6 +37,15 @@ export async function parsePDFController(req: Request, res: Response) {
       const buffer = Buffer.concat(chunks);
       const pdfData = (await parsePDF(buffer)) as any;
 
+      const updatedUpload = await prisma.upload.update({
+        where: {
+          uploadId: uploadId,
+        },
+        data: {
+          parseResult: pdfData,
+        },
+      });
+
       const parsedResult = await prisma.parseResult.upsert({
         where: {
           uploadId: uploadId,
