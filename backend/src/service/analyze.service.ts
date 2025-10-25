@@ -167,7 +167,7 @@ const outputSchema: Schema = {
 
 const generationConfig: GenerationConfig = {
   temperature: 0.2,
-  maxOutputTokens: 4000,
+  maxOutputTokens: 8000,
   responseMimeType: "application/json",
   responseSchema: outputSchema,
 };
@@ -190,17 +190,20 @@ export type SlimSolution = {
 export async function runLLM(pdfData: string): Promise<SlimSolution> {
   // pdfData is expected to be a JSON string like: {"text": ["...", "...", "..."]}
   const model = llm.getGenerativeModel({
-    model: "gemini-1.5-pro",
+    model: "gemini-2.5-pro",
     generationConfig,
   });
 
   const prompt = `${HOMEWORK_SOLVER_PROMPT}\n\nINPUT JSON: ${pdfData}`;
 
+  console.log("prompt: ", prompt);
   const res = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
   });
+  console.log(res);
 
   const text = res.response.text();
+  console.log("LLM Raw Output:", text);
   try {
     return JSON.parse(text) as SlimSolution;
   } catch {

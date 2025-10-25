@@ -1,6 +1,6 @@
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { Response } from "express";
-import { runLLM } from "../service/llm.service";
+import { runLLM } from "../service/analyze.service";
 import { prisma } from "../db/prisma";
 import { makeLLMInputFromText } from "../utils/format";
 
@@ -40,9 +40,10 @@ export async function runAnalysis(req: AuthenticatedRequest, res: Response) {
         .json({ message: "parse result not found", payload: "" });
     }
 
-    const prompt = makeLLMInputFromText(parsed);
-    const result = await runLLM(prompt);
-
+    const pdfData = makeLLMInputFromText(parsed);
+    console.log("LLM Prompt:", pdfData);
+    const result = await runLLM(pdfData);
+    console.log("LLM Result:", result);
     const analysis = await prisma.analysisResult.create({
       data: {
         uploadId: upload.uploadId,
