@@ -1,10 +1,7 @@
 export type SpanOptions = {
   maxSpanLength?: number;
-
   maxSpans?: number;
-
   prependPrompt?: string;
-
   normalizeWhitespace?: boolean;
 };
 
