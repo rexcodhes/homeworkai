@@ -8,11 +8,11 @@ export const presignSchema = z.object({
     .int()
     .positive()
     .max(50 * 1024 * 1024)
-    .optional(), 
+    .optional(),
   folder: z.string().optional(),
 });
 
 export const confirmSchema = z.object({
-  bucket: z.string().optional(),
+  bucket: z.string(),
   key: z.string().min(1),
 });

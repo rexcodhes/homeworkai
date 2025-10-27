@@ -1,6 +1,6 @@
 import { PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { s3, storageBucket } from "../config/storage";
+import { s3, storageBucket } from "../config/storage.config";
 
 export async function presignPut(params: {
   key: string;

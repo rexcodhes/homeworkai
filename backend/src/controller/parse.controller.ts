@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { parsePDF } from "../service/parse.service";
-import { prisma } from "../db/prisma";
-import { s3 } from "../config/storage";
+import { prisma } from "../db/prisma.db";
+import { s3 } from "../config/storage.config";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { userSchema } from "../schema/user.schema";
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/prisma.db";
 import bcrypt from "bcrypt";
 
 export async function createUser(req: Request, res: Response) {
@@ -21,13 +21,11 @@ export async function createUser(req: Request, res: Response) {
         password,
       },
     });
-    return res
-      .status(201)
-      .json({
-        userId: newUser.userId,
-        name: newUser.name,
-        email: newUser.email,
-      });
+    return res.status(201).json({
+      userId: newUser.userId,
+      name: newUser.name,
+      email: newUser.email,
+    });
   } catch (error) {
     console.error("Create user failed:", error);
     return res.status(500).json({ error: (error as Error).message });

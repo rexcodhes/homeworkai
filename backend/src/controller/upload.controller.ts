@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { presignSchema, confirmSchema } from "../schema/upload.schema";
 import { presignPut, headObject } from "../service/storage.service";
 import crypto from "crypto";
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/prisma.db";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { error } from "console";
 
@@ -39,6 +39,7 @@ export async function presignUpload(req: AuthenticatedRequest, res: Response) {
 
     const newUpload = await prisma.upload.create({
       data: {
+        userId: req.user?.userId as number,
         uploadId,
         key,
         bucket,
@@ -70,6 +71,16 @@ export async function confirmUpload(req: AuthenticatedRequest, res: Response) {
   }
 
   try {
+    const upload = await prisma.upload.findFirst({
+      where: {
+        bucket: parsed.data.bucket as string,
+        key: parsed.data.key,
+      },
+    });
+
+    if (upload?.userId !== user.userId) {
+      return res.status(403).json({ error: "User mismatch" });
+    }
     const { bucket, key } = parsed.data;
     const meta = await headObject(bucket ? { key, bucket } : { key });
 
@@ -106,11 +117,12 @@ export async function listUpload(req: AuthenticatedRequest, res: Response) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   try {
-    const uploads = await prisma.upload.findMany({
+    const listUploads = await prisma.upload.findMany({
       where: { userId: user.userId },
       include: { parseResult: true, analyses: true },
     });
-    return res.status(200).json({ uploads });
+
+    return res.status(200).json({ listUploads });
   } catch (error) {
     return res.status(500).json({ error: "Failed to list uploads" });
   }
@@ -126,14 +138,19 @@ export async function getUpload(req: AuthenticatedRequest, res: Response) {
     return res.status(400).json({ error: "Missing uploadId" });
   }
   try {
-    const upload = await prisma.upload.findUnique({
-      where: { uploadId: uploadId },
+    const upload = await prisma.upload.findFirst({
+      where: { uploadId: uploadId, userId: user.userId },
       include: { parseResult: true, analyses: true },
     });
 
     if (!upload) {
       return res.status(404).json({ error: "Upload not found" });
     }
+
+    if (upload.userId !== user.userId) {
+      return res.status(403).json({ error: "User mismatch" });
+    }
+
     return res.status(200).json({ upload });
   } catch (error) {
     return res.status(500).json({ error: "Failed to get upload" });
@@ -150,7 +167,7 @@ export async function deleteUpload(req: AuthenticatedRequest, res: Response) {
     return res.status(400).json({ error: "Missing uploadId" });
   }
   try {
-    const upload = await prisma.upload.findUnique({
+    const upload = await prisma.upload.findFirst({
       where: { uploadId: uploadId, userId: user.userId },
     });
     if (!upload) {

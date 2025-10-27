@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/prisma.db";
 import { loginSchema } from "../schema/auth.schema";
 import { registerSchema } from "../schema/auth.schema";
 import jwt from "jsonwebtoken";
