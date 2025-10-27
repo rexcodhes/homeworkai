@@ -23,8 +23,8 @@ app.use("/api/v1", apiRoutes);
 
 apiRoutes.use("/users", userRoutes);
 apiRoutes.use("/auth", authRoutes);
-apiRoutes.use("/parse", parseRoutes);
-apiRoutes.use("/upload", uploadRoutes);
+apiRoutes.use("/parse", authMiddleware, parseRoutes);
+apiRoutes.use("/upload", authMiddleware, uploadRoutes);
 apiRoutes.use("/analyze", authMiddleware, analyzeRoutes);
 
 app.listen(PORT, () => {

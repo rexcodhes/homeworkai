@@ -3,6 +3,8 @@ import { presignSchema, confirmSchema } from "../schema/upload.schema";
 import { presignPut, headObject } from "../service/storage.service";
 import crypto from "crypto";
 import { prisma } from "../db/prisma";
+import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { error } from "console";
 
 function sanitizeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -13,11 +15,16 @@ function sanitizeFolder(input?: string) {
   return clean ? `${clean}/` : "";
 }
 
-export async function presignUpload(req: Request, res: Response) {
+export async function presignUpload(req: AuthenticatedRequest, res: Response) {
   const parsed = presignSchema.safeParse(req.body);
 
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid request body" });
+  }
+
+  const user = req.user;
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   const { filename, contentType, folder } = parsed.data;
@@ -51,10 +58,15 @@ export async function presignUpload(req: Request, res: Response) {
   }
 }
 
-export async function confirmUpload(req: Request, res: Response) {
+export async function confirmUpload(req: AuthenticatedRequest, res: Response) {
   const parsed = confirmSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid request body" });
+  }
+
+  const user = req.user;
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
@@ -85,5 +97,70 @@ export async function confirmUpload(req: Request, res: Response) {
     });
   } catch (e) {
     return res.status(500).json({ error: "Failed to confirm upload" });
+  }
+}
+
+export async function listUpload(req: AuthenticatedRequest, res: Response) {
+  const user = req.user;
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  try {
+    const uploads = await prisma.upload.findMany({
+      where: { userId: user.userId },
+      include: { parseResult: true, analyses: true },
+    });
+    return res.status(200).json({ uploads });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to list uploads" });
+  }
+}
+
+export async function getUpload(req: AuthenticatedRequest, res: Response) {
+  const user = req.user;
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const { uploadId } = req.params;
+  if (!uploadId) {
+    return res.status(400).json({ error: "Missing uploadId" });
+  }
+  try {
+    const upload = await prisma.upload.findUnique({
+      where: { uploadId: uploadId },
+      include: { parseResult: true, analyses: true },
+    });
+
+    if (!upload) {
+      return res.status(404).json({ error: "Upload not found" });
+    }
+    return res.status(200).json({ upload });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to get upload" });
+  }
+}
+
+export async function deleteUpload(req: AuthenticatedRequest, res: Response) {
+  const user = req.user;
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const { uploadId } = req.params;
+  if (!uploadId) {
+    return res.status(400).json({ error: "Missing uploadId" });
+  }
+  try {
+    const upload = await prisma.upload.findUnique({
+      where: { uploadId: uploadId, userId: user.userId },
+    });
+    if (!upload) {
+      return res.status(404).json({ error: "Upload not found" });
+    }
+    await prisma.upload.delete({
+      where: { uploadId: uploadId },
+    });
+    return res.status(200).json({ message: "Upload deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to delete upload" });
   }
 }
