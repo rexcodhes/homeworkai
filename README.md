@@ -35,8 +35,8 @@ Check `backend/prisma/schema.prisma` for the exact schema in your repo. If you r
 - `backend/src/controller/*` — Controllers
 - `backend/src/service/*` — Storage, parse, LLM services
 - `backend/src/middleware/auth.middleware.ts` — Bearer JWT auth
-- `backend/src/db/prisma.ts` — Prisma client
-- `backend/src/utils/format.ts` — Helpers (LLM input shaping)
+- `backend/src/db/prisma.db.ts` — Prisma client
+- `backend/src/utils/format.utils.ts` — Helpers (LLM input shaping)
 - `backend/prisma/schema.prisma` — Database schema
 
 ## Prerequisites
@@ -89,14 +89,17 @@ Required values used by the codebase:
 Auth
 - `POST /auth/login` → `{ token }` (payload contains `{ userId }`)
 
-Upload
-- `POST /upload/presign` → `{ uploadId, url, bucket, key, expiresAt }`
-- `POST /upload/confirm` → object metadata; updates Upload to `uploaded`
+Upload (JWT required)
+- `POST /upload/presign` ? `{ uploadId, url, bucket, key, expiresAt }` (assigns `userId`)
+- `POST /upload/confirm` ? object metadata; enforces ownership; updates Upload to `uploaded`
+- `GET /upload/list` ? uploads owned by the user (includes parse/analyses)
+- `GET /upload/:uploadId` ? single upload (ownership enforced)
+- `DELETE /upload/:uploadId/delete` ? delete upload (ownership enforced)
 
-Parse
+Parse (JWT required)
 - `POST /parse/:uploadId/parse` → parses PDF, persists `ParseResult`
 
-Analyze (protected by JWT)
+Analyze (JWT required)
 - `POST /analyze/:uploadId` → builds spans, calls Gemini (JSON mode), persists `AnalysisResult`
 
 ## Typical Flow (Postman)
@@ -137,7 +140,7 @@ Analyze (protected by JWT)
 
 ## Key Components
 
-Storage (`backend/src/config/storage.ts`, `backend/src/service/storage.service.ts`)
+Storage (`backend/src/config/storage.config.ts`, `backend/src/service/storage.service.ts`)
 - Configures S3 client for MinIO/S3
 - Presigned PUT for browser uploads
 - HEAD for confirmation
@@ -147,10 +150,10 @@ Parsing (`backend/src/service/parse.service.ts`, `backend/src/controller/parse.c
 - Uses `pdf-parse` correctly on a Buffer
 - Persists `ParseResult` via Prisma `upsert`
 
-LLM (`backend/src/service/llm.service.ts`)
+LLM (`backend/src/service/analyze.service.ts`)
 - Gemini 1.5 via `@google/generative-ai`
 - JSON mode with strict `responseSchema` (Slim output)
-- Parses `response.text()` into JSON
+- Returns parsed JSON used to persist `AnalysisResult`
 
 Analyze (`backend/src/controller/analyze.controller.ts`)
 - Authenticated route (JWT)
@@ -159,7 +162,7 @@ Analyze (`backend/src/controller/analyze.controller.ts`)
 
 Auth (`backend/src/middleware/auth.middleware.ts`, `backend/src/controller/auth.controller.ts`)
 - Issues and verifies JWT containing `{ userId }`
-- Protects `/analyze` routes in `app.ts`
+- Protects `/upload`, `/parse`, `/analyze` routes in `app.ts`
 
 ## Scaling & Production Notes
 
@@ -178,7 +181,7 @@ Auth (`backend/src/middleware/auth.middleware.ts`, `backend/src/controller/auth.
   - Default to `gemini-1.5-flash` for throughput, switch to `-pro` for complex cases
   - Add a one‑retry loop on invalid JSON with a short repair instruction
 - Security
-  - Enforce owner checks (`upload.userId === req.user.userId`) when applicable
+  - Enforce owner checks (`upload.userId === req.user.userId`) across confirm/get/delete/parse/analyze
   - Validate request bodies with Zod everywhere
   - Do not log secrets; rotate keys regularly
 
@@ -207,4 +210,11 @@ From `backend/`:
 ## License
 
 Proprietary (adjust to your needs). Do not commit secrets.
+
+
+
+
+
+
+
 
