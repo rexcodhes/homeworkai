@@ -61,7 +61,6 @@ export async function runAnalysis(req: AuthenticatedRequest, res: Response) {
         status: "completed",
         solutionBucket: upload.bucket,
         solutionKey: upload.key,
-        pages: upload.size,
       },
     });
 

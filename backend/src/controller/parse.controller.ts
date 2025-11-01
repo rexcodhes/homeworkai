@@ -4,8 +4,16 @@ import { prisma } from "../db/prisma.db";
 import { s3 } from "../config/storage.config";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
+import { AuthenticatedRequest } from "../middleware/auth.middleware";
 
-export async function parsePDFController(req: Request, res: Response) {
+export async function parsePDFController(
+  req: AuthenticatedRequest,
+  res: Response
+) {
+  const user = req.user;
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
   const uploadId = req.params.uploadId;
   if (!uploadId) {
     return res.status(400).json({ error: "Missing uploadId" });
@@ -19,6 +27,10 @@ export async function parsePDFController(req: Request, res: Response) {
     });
     if (!upload) {
       return res.status(404).json({ error: "Upload not found" });
+    }
+
+    if (upload.userId !== req.user?.userId) {
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     const command = new GetObjectCommand({
