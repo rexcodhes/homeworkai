@@ -1,22 +1,16 @@
 import { Worker } from "bullmq";
-import Redis from "ioredis";
-import dotenv from "dotenv";
 import { processAnalyzeJob } from "../processors/analyze.processor";
+import { Jobs } from "../types/job.types";
+import { Job } from "bullmq";
+import { redisClient } from "../config/redis.config";
 
-dotenv.config();
-const env = process.env;
-
-const connection = new Redis(env.REDIS_URL as string, {
-  maxRetriesPerRequest: null,
-});
-
-const worker = new Worker(
-  "analysisJobs",
-  async (job) => {
-    console.log("Processing job:", job.data);
+const worker = new Worker<Jobs>(
+  "analyzeJobs",
+  async function worker(job: Job<Jobs>) {
     await processAnalyzeJob(job);
+    console.log("Processing job:", job);
   },
-  { connection }
+  { connection: redisClient }
 );
 
 worker.on("completed", (job) => {

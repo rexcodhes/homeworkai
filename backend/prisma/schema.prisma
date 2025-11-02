@@ -31,9 +31,8 @@ model Upload {
   // Use string UUID so your API can return uploadId immediately
   uploadId    String        @id @default(uuid())
 
-  // Ownership (optional now; wire when auth is ready)
-  user        User?         @relation(fields: [userId], references: [userId])
-  userId      Int?
+  user        User         @relation(fields: [userId], references: [userId])
+  userId      Int
 
   // Storage locator
   bucket      String
@@ -54,7 +53,7 @@ model Upload {
   error       String?       // last error message (if failed)
 
   // Parse output (optional; one-to-one)
-  parseResult ParseResult?
+  parseResult ParseResult? 
 
   // LLM analyses (optional; one-to-many)
   analyses    AnalysisResult[]

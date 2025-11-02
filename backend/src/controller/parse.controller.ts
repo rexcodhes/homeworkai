@@ -33,6 +33,15 @@ export async function parsePDFController(
       return res.status(403).json({ error: "Forbidden" });
     }
 
+    await prisma.upload.update({
+      where: {
+        uploadId: uploadId,
+      },
+      data: {
+        status: "processing",
+      },
+    });
+
     const command = new GetObjectCommand({
       Bucket: upload.bucket,
       Key: upload.key,
@@ -49,6 +58,17 @@ export async function parsePDFController(
       const buffer = Buffer.concat(chunks);
       const pdfData = (await parsePDF(buffer)) as any;
       console.log(pdfData);
+
+      if (pdfData.success) {
+        await prisma.upload.update({
+          where: {
+            uploadId: uploadId,
+          },
+          data: {
+            status: "processing",
+          },
+        });
+      }
 
       const parsedResult = await prisma.parseResult.upsert({
         where: {

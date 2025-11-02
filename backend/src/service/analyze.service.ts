@@ -69,7 +69,6 @@ export type SlimSolution = {
 };
 
 export async function runLLM(pdfData: string): Promise<SlimSolution> {
-  // pdfData is expected to be a JSON string like: {"text": ["...", "...", "..."]}
   const model = llm.getGenerativeModel({
     model: "gemini-2.5-pro",
     generationConfig,

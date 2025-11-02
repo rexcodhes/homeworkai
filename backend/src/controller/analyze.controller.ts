@@ -1,8 +1,7 @@
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { Response } from "express";
-import { runLLM } from "../service/analyze.service";
 import { prisma } from "../db/prisma.db";
-import { makeLLMInputFromText } from "../utils/format.utils";
+import { enqueueAnalysisJob } from "../queues/analysis.queue";
 
 export async function runAnalysis(req: AuthenticatedRequest, res: Response) {
   const uploadId = req.params.uploadId as string;
@@ -48,28 +47,15 @@ export async function runAnalysis(req: AuthenticatedRequest, res: Response) {
       },
     });
 
-    const pdfData = makeLLMInputFromText(parsed);
-    console.log("LLM Prompt:", pdfData);
-    const result = await runLLM(pdfData);
-    console.log("LLM Result:", result);
-    const updatedAnalysis = await prisma.analysisResult.update({
-      where: {
-        id: newAnalysis.id,
-      },
-      data: {
-        output: result,
-        status: "completed",
-        solutionBucket: upload.bucket,
-        solutionKey: upload.key,
-      },
-    });
+    const id = newAnalysis.id;
+    const analysisUploadId: string = newAnalysis.uploadId;
+    const jobData = {
+      analysisId: id,
+      uploadId: analysisUploadId,
+    };
 
-    if (!updatedAnalysis) {
-      return res
-        .status(500)
-        .json({ message: "Failed to update analysis", payload: "" });
-    }
-    return res.status(201).json(updatedAnalysis);
+    const enqueued = await enqueueAnalysisJob("analyzeJobs", jobData);
+    return res.status(200).json({ message: "Analysis enqueued", payload: "" });
   } catch (error) {
     console.log(error);
     return res.status(500).json({

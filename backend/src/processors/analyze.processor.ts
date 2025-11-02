@@ -3,9 +3,9 @@ import { makeLLMInputFromText } from "../utils/format.utils";
 import { runLLM } from "../service/analyze.service";
 import { jobSchema } from "../schema/job.schema";
 import { Prisma, AnalysisStatus } from "@prisma/client";
-import { Job } from "bullmq";
-import { Jobs } from "../types/job.types";
 import { resultSchema } from "../schema/result.schema";
+import { Jobs } from "../types/job.types";
+import { Job } from "bullmq";
 
 export async function processAnalyzeJob(job: Job<Jobs>) {
   const parsed = jobSchema.safeParse(job.data);
