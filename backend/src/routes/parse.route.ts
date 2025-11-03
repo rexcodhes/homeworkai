@@ -3,6 +3,6 @@ import { parsePDFController } from "../controller/parse.controller";
 
 const parseRoutes: Router = Router();
 
-parseRoutes.post("/:uploadId/parse", parsePDFController);
+parseRoutes.post("/:uploadId", parsePDFController);
 
 export default parseRoutes;

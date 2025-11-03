@@ -4,8 +4,8 @@ import { prisma } from "../db/prisma.db";
 import { enqueueAnalysisJob } from "../queues/analysis.queue";
 
 export async function runAnalysis(req: AuthenticatedRequest, res: Response) {
-  const uploadId = req.params.uploadId as string;
-  if (!uploadId) {
+  const uploadId = req.params.uploadId;
+  if (!uploadId || uploadId !== "") {
     return res
       .status(400)
       .json({ message: "uploadId is required", payload: "" });
@@ -32,8 +32,8 @@ export async function runAnalysis(req: AuthenticatedRequest, res: Response) {
       return res.status(403).json({ message: "Forbidden", payload: "" });
     }
 
-    const parsed = upload.parseResult?.text as string;
-    if (!parsed) {
+    const parsed = upload.parseResult?.text;
+    if (!parsed || parsed === "") {
       return res
         .status(404)
         .json({ message: "parse result not found", payload: "" });
@@ -55,7 +55,10 @@ export async function runAnalysis(req: AuthenticatedRequest, res: Response) {
     };
 
     const enqueued = await enqueueAnalysisJob("analyzeJobs", jobData);
-    return res.status(200).json({ message: "Analysis enqueued", payload: "" });
+    return res.status(200).json({
+      message: "Analysis enqueued",
+      payload: { analysisId: newAnalysis.id },
+    });
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -85,6 +88,12 @@ export async function getAnalysis(req: AuthenticatedRequest, res: Response) {
   }
 
   try {
+    const upload = await prisma.upload.findUnique({
+      where: {
+        uploadId: uploadID,
+      },
+    });
+
     const analysis = await prisma.analysisResult.findFirst({
       where: {
         uploadId: uploadID,
@@ -95,6 +104,9 @@ export async function getAnalysis(req: AuthenticatedRequest, res: Response) {
       return res
         .status(404)
         .json({ message: "Analysis not found", payload: "" });
+    }
+    if (upload?.userId !== req.user?.userId) {
+      return res.status(403).json({ message: "User mismatch", payload: "" });
     }
     return res.status(200).json(analysis.output);
   } catch (error) {

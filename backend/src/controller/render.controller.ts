@@ -1,8 +1,7 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { prisma } from "../db/prisma.db";
-import { renderSlimToPdfBuffer } from "../service/render.service";
-import { AnalysisOutput } from "../types/analysisoutput.types";
+import { renderSlimToPdfBuffer } from "../services/render.service";
 import { resultSchema } from "../schema/result.schema";
 import { s3 } from "../config/storage.config";
 import { PutObjectCommand } from "@aws-sdk/client-s3";

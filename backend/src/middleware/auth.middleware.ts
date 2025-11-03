@@ -1,8 +1,5 @@
-import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
+import jwt, { JwtPayload } from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
-
-dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
 if (!JWT_SECRET) {
@@ -31,12 +28,12 @@ export function authMiddleware(
     if (
       typeof payload !== "object" ||
       !payload ||
-      typeof (payload as any).userId !== "number"
+      typeof (payload as JwtPayload).userId !== "number"
     ) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    req.user = { userId: (payload as any).userId };
+    req.user = { userId: (payload as JwtPayload).userId };
     return next();
   } catch (error) {
     return res.status(401).json({ error: "Unauthorized" });

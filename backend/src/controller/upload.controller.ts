@@ -1,10 +1,9 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { presignSchema, confirmSchema } from "../schema/upload.schema";
-import { presignPut, headObject } from "../service/storage.service";
+import { presignPut, headObject } from "../services/storage.service";
 import crypto from "crypto";
 import { prisma } from "../db/prisma.db";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
-import { error } from "console";
 
 function sanitizeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -28,7 +27,6 @@ export async function presignUpload(req: AuthenticatedRequest, res: Response) {
   }
 
   const { filename, contentType, folder } = parsed.data;
-  const uploadId = crypto.randomUUID();
   const key = `${sanitizeFolder(folder)}${sanitizeFilename(filename)}`;
 
   try {
@@ -40,15 +38,18 @@ export async function presignUpload(req: AuthenticatedRequest, res: Response) {
     const newUpload = await prisma.upload.create({
       data: {
         userId: req.user?.userId as number,
-        uploadId,
         key,
         bucket,
         status: "uploading",
       },
     });
 
+    if (!newUpload) {
+      return res.status(500).json({ error: "Failed to create presigned URL" });
+    }
+
     res.status(200).json({
-      uploadId,
+      uploadId: newUpload.uploadId,
       url,
       key,
       bucket,
@@ -98,6 +99,10 @@ export async function confirmUpload(req: AuthenticatedRequest, res: Response) {
       },
     });
 
+    if (!updatedUpload) {
+      return res.status(500).json({ error: "Failed to confirm upload" });
+    }
+
     return res.status(200).json({
       bucket,
       key,
@@ -121,6 +126,10 @@ export async function listUpload(req: AuthenticatedRequest, res: Response) {
       where: { userId: user.userId },
       include: { parseResult: true, analyses: true },
     });
+
+    if (!listUploads) {
+      return res.status(500).json({ error: "Uploads doesn't exist" });
+    }
 
     return res.status(200).json({ listUploads });
   } catch (error) {
@@ -173,6 +182,11 @@ export async function deleteUpload(req: AuthenticatedRequest, res: Response) {
     if (!upload) {
       return res.status(404).json({ error: "Upload not found" });
     }
+
+    if (upload.userId !== user.userId) {
+      return res.status(403).json({ error: "User mismatch" });
+    }
+
     await prisma.upload.delete({
       where: { uploadId: uploadId },
     });

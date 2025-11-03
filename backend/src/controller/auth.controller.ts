@@ -3,13 +3,10 @@ import { prisma } from "../db/prisma.db";
 import { loginSchema } from "../schema/auth.schema";
 import { registerSchema } from "../schema/auth.schema";
 import jwt from "jsonwebtoken";
-import dontenv from "dotenv";
 import bcrypt from "bcrypt";
 
-dontenv.config();
-
-const JWT_SECRET = process.env.JWT_SECRET || "your_secret_key";
-if (!JWT_SECRET) {
+const JWT_SECRET = process.env.JWT_SECRET as string;
+if (!JWT_SECRET || JWT_SECRET === undefined || JWT_SECRET === "") {
   throw new Error("JWT_SECRET not found");
 }
 
@@ -66,7 +63,10 @@ export async function register(req: Request, res: Response) {
     const user = await prisma.user.create({
       data: { name, email, password: hashedPassword },
     });
-    return res.status(201).json({ message: "User registered successfully" });
+    return res.status(201).json({
+      message: "User registered successfully",
+      payload: { userId: user.userId, name: user.name },
+    });
   } catch (error) {
     return res.status(500).json({ error: (error as Error).message });
   }

@@ -1,6 +1,6 @@
 import { prisma } from "../db/prisma.db";
 import { makeLLMInputFromText } from "../utils/format.utils";
-import { runLLM } from "../service/analyze.service";
+import { runLLM } from "../services/analyze.service";
 import { jobSchema } from "../schema/job.schema";
 import { Prisma, AnalysisStatus } from "@prisma/client";
 import { resultSchema } from "../schema/result.schema";
@@ -58,11 +58,14 @@ export async function processAnalyzeJob(job: Job<Jobs>) {
       throw new Error("Invalid input");
     }
     const output = await runLLM(input);
+    if (!output || typeof output !== "object" || output === null) {
+      throw new Error("Invalid output");
+    }
     const parsedOutput = resultSchema.safeParse(output);
     if (!parsedOutput.success) {
       await prisma.analysisResult.update({
         where: {
-          id: data.id,
+          id: data.id, 
         },
         data: {
           status: AnalysisStatus.failed,

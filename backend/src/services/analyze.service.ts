@@ -1,14 +1,11 @@
-// backend/src/service/llm.service.ts
 import {
   GoogleGenerativeAI,
   SchemaType,
   type Schema,
   type GenerationConfig,
 } from "@google/generative-ai";
-import dotenv from "dotenv";
 import { HOMEWORK_SOLVER_PROMPT } from "../utils/prompt.utils";
-
-dotenv.config();
+import { AnalysisOutput } from "../types/analysisoutput.types";
 
 const GOOGLE_API_KEY: string = process.env.GOOGLE_API_KEY as string;
 if (!GOOGLE_API_KEY) {
@@ -55,27 +52,13 @@ const generationConfig: GenerationConfig = {
 
 const llm = new GoogleGenerativeAI(GOOGLE_API_KEY);
 
-export type SlimSolution = {
-  document_id: string;
-  questions: Array<{
-    qid: string;
-    question_text: string;
-    parts: Array<{
-      label: string;
-      answer: string;
-      workings: string;
-    }>;
-  }>;
-};
-
-export async function runLLM(pdfData: string): Promise<SlimSolution> {
+export async function runLLM(pdfData: string): Promise<AnalysisOutput> {
   const model = llm.getGenerativeModel({
     model: "gemini-2.5-pro",
     generationConfig,
   });
 
   const prompt = `${HOMEWORK_SOLVER_PROMPT}\n\nINPUT JSON: ${pdfData}`;
-
   console.log("prompt: ", prompt);
   const res = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -85,7 +68,7 @@ export async function runLLM(pdfData: string): Promise<SlimSolution> {
   const text = res.response.text();
   console.log("LLM Raw Output:", text);
   try {
-    return JSON.parse(text) as SlimSolution;
+    return JSON.parse(text) as AnalysisOutput;
   } catch {
     throw new Error("LLM returned non-JSON output");
   }

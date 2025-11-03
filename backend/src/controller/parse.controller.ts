@@ -1,10 +1,11 @@
-import { Request, Response } from "express";
-import { parsePDF } from "../service/parse.service";
+import { Response } from "express";
+import { parsePDF } from "../services/parse.service";
 import { prisma } from "../db/prisma.db";
 import { s3 } from "../config/storage.config";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { ParsedResult } from "../types/parsedresult.types";
 
 export async function parsePDFController(
   req: AuthenticatedRequest,
@@ -56,19 +57,29 @@ export async function parsePDFController(
         chunks.push(chunk as Buffer);
       }
       const buffer = Buffer.concat(chunks);
-      const pdfData = (await parsePDF(buffer)) as any;
+      const pdfData = (await parsePDF(buffer)) as ParsedResult;
       console.log(pdfData);
 
-      if (pdfData.success) {
+      if (!pdfData.text || pdfData.text === "") {
         await prisma.upload.update({
           where: {
             uploadId: uploadId,
           },
           data: {
-            status: "processing",
+            status: "failed",
           },
         });
+        return res.status(400).json({ error: "Failed to parse PDF" });
       }
+
+      const update = await prisma.upload.update({
+        where: {
+          uploadId: uploadId,
+        },
+        data: {
+          status: "processed",
+        },
+      });
 
       const parsedResult = await prisma.parseResult.upsert({
         where: {
