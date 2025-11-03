@@ -8,9 +8,9 @@ An Express + TypeScript backend for an AI‑assisted homework solver. Users uplo
 - DB: PostgreSQL via Prisma
 - Object Storage: MinIO/S3 (AWS SDK v3)
 - Parsing: `pdf-parse`
-- LLM: Gemini 1.5 (JSON mode with schema)
+- LLM: Gemini 2.5 Pro (JSON mode with schema)
 - Rendering: `pdfkit` (export Slim analysis output to PDF and store in S3)
-- Background Jobs: BullMQ worker + Redis (optional, for queued analysis)
+- Background Jobs: BullMQ worker + Redis (analysis runs asynchronously)
 
 ## Architecture
 
@@ -19,6 +19,7 @@ An Express + TypeScript backend for an AI‑assisted homework solver. Users uplo
 - Parse flow
   - GetObject → Buffer → `pdf-parse` → Persist `ParseResult` → Update `Upload.status`
 - Analyze flow
+  - (Async) Enqueue analysis job (BullMQ) → Worker processes and updates status/output
   - Build spans from parsed text → LLM (Gemini) with strict JSON schema → Persist `AnalysisResult`
 
 ### Data Model (Prisma)
@@ -85,16 +86,19 @@ Required values used by the codebase:
 4. Start server
 
 - From `backend/`:
-  - `npm run dev`
-- API base: `http://localhost:3000/api/v1`
+  - Dev (TypeScript) with tsx: `npx tsx watch src/app.ts`
+    - or with ts-node-dev: `npx ts-node-dev --respawn --transpile-only src/app.ts`
+  - API base: `http://localhost:3000/api/v1`
 
-5. Analysis worker (optional async processing)
+5. Analysis worker (async processing)
 
-- Build TypeScript if needed: `npx tsc`
-- From `backend/` run the worker:
-  - `node dist/workers/analyze.worker.js`
-  - (or run with `ts-node`/`tsx` if you prefer to execute TypeScript directly)
-- Requires `REDIS_URL` pointing to a reachable Redis instance.
+Run the worker alongside the API. Both processes must load the same `.env` and use the same `REDIS_URL`.
+
+- Dev (TypeScript) with tsx: `npx tsx watch src/workers/analyze.worker.ts`
+- or with ts-node-dev: `npx ts-node-dev --respawn --transpile-only src/workers/analyze.worker.ts`
+- Production (from build):
+  - Build: `npx tsc`
+  - Run: `node dist/workers/analyze.worker.js`
 
 ## Endpoints
 
@@ -164,11 +168,17 @@ Analyze (JWT required)
 - Body: `{ "email": "...", "password": "..." }`
 - Use returned `token` as `Authorization: Bearer <token>`
 
-6. Analyze
+6. Analyze (enqueue)
 
 - `POST /api/v1/analyze/<uploadId>` with `Authorization` header
-- Optional body: `{ "prompt": "extra instruction", "model": "gemini-1.5-flash" }`
-- Returns created `AnalysisResult` (stored JSON output from LLM)
+- Response: `200 { "message": "Analysis enqueued" }`
+
+7. Poll for analysis result
+
+- `GET /api/v1/upload/<uploadId>`
+- Inspect `upload.analyses[]` for items:
+  - `status`: `queued | running | completed | failed`
+  - `output`: JSON available when `completed`
 
 ## Key Components
 
@@ -186,7 +196,7 @@ Parsing (`backend/src/service/parse.service.ts`, `backend/src/controller/parse.c
 
 LLM (`backend/src/service/analyze.service.ts`)
 
-- Gemini 1.5 via `@google/generative-ai`
+- Gemini 2.5 Pro via `@google/generative-ai`
 - JSON mode with strict `responseSchema` (Slim output)
 - Returns parsed JSON used to persist `AnalysisResult`
 
@@ -194,11 +204,11 @@ Render (`backend/src/controller/render.controller.ts`, `backend/src/service/rend
 
 - Validates Slim output, renders solution PDFs with `pdfkit`, and uploads them to storage
 
-Analyze (`backend/src/controller/analyze.controller.ts`)
+Analyze (`backend/src/controller/analyze.controller.ts`, `backend/src/queues/analysis.queue.ts`)
 
 - Authenticated route (JWT)
-- Loads `ParseResult`, shapes text into spans via `utils/format`
-- Calls `runLLM`, persists `AnalysisResult`
+- Creates an `AnalysisResult` with status `queued` and enqueues a BullMQ job
+- Worker processes the job and updates status/output in the database
 
 Workers (`backend/src/workers/analyze.worker.ts`, `backend/src/processors/analyze.processor.ts`, `backend/src/schema/job.schema.ts`)
 
