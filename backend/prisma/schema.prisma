@@ -1,4 +1,3 @@
-// backend/prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,62 +13,52 @@ model User {
   email     String   @unique
   password  String
   createdAt DateTime @default(now())
-
-  // Optional relation to uploads created by this user
   uploads   Upload[]
 }
 
 enum UploadStatus {
-  uploading   // presign issued, not confirmed yet
-  uploaded    // HEAD confirmed in storage
-  processing  // parse job running (if you go async)
-  processed   // parse finished successfully
-  failed      // parse/validation failed
+  uploading   
+  uploaded    
+  processing 
+  processed  
+  failed      
 }
 
-model Upload {
-  // Use string UUID so your API can return uploadId immediately
+model Upload {  
   uploadId    String        @id @default(uuid())
 
   user        User         @relation(fields: [userId], references: [userId])
   userId      Int
 
-  // Storage locator
   bucket      String
   key         String
 
-  // Object metadata (filled on confirm)
-  size        Int?          // bytes; use BigInt? if you expect >2GB files
+  size        Int?          
   mime        String?
   etag        String?
-  checksum    String?       // e.g., sha256 if you compute it
+  checksum    String?       
 
-  // Lifecycle + audit
+
   status      UploadStatus  @default(uploading)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   confirmedAt DateTime?
   processedAt DateTime?
-  error       String?       // last error message (if failed)
-
-  // Parse output (optional; one-to-one)
+  error       String?       
   parseResult ParseResult? 
-
-  // LLM analyses (optional; one-to-many)
   analyses    AnalysisResult[]
 
-  @@unique([bucket, key])   // one object per bucket/key
+  @@unique([bucket, key])  
   @@index([userId])
 }
 
 model ParseResult {
   id        String  @id @default(uuid())
 
-  // 1:1 with Upload; cascade delete if Upload is removed
   upload    Upload  @relation(fields: [uploadId], references: [uploadId], onDelete: Cascade)
   uploadId  String  @unique
 
-  text      String  // extracted text (Postgres text type)
+  text      String  
   numPages  Int?
   createdAt DateTime @default(now())
 }
@@ -83,28 +72,22 @@ enum AnalysisStatus {
 
 model AnalysisResult {
   id        String  @id @default(uuid())
-
-  // Many analyses can reference one Upload
+ 
   upload    Upload  @relation(fields: [uploadId], references: [uploadId], onDelete: Cascade)
   uploadId  String
-
-  // Prompt + model provenance (optional)
+ 
   prompt    String?
   model     String?
 
-  // LLM run state
   status    AnalysisStatus @default(completed)
   error     String?
-
-  // Slim JSON output from LLM
+  
   output    Json
 
-  // Optional token usage metrics
   usagePromptTokens     Int?
   usageCompletionTokens Int?
   usageTotalTokens      Int?
 
-  // Optional: rendered solution PDF stored back to MinIO/S3
   solutionBucket String?
   solutionKey    String?
   pages          Int?

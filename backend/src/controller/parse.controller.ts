@@ -5,7 +5,7 @@ import { s3 } from "../config/storage.config";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
-import { ParsedResult } from "../types/parsedresult.types";
+import { ParsedResult } from "../types/parsed-result.types";
 
 export async function parsePDFController(
   req: AuthenticatedRequest,

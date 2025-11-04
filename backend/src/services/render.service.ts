@@ -1,6 +1,6 @@
 import pdfkit from "pdfkit";
 import { PassThrough } from "stream";
-import { AnalysisOutput } from "../types/analysisoutput.types";
+import { AnalysisOutput } from "../types/analysis-output.types";
 
 export function renderOutputToPdfStream(slim: AnalysisOutput) {
   const doc = new pdfkit({

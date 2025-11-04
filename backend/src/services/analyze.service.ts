@@ -5,7 +5,7 @@ import {
   type GenerationConfig,
 } from "@google/generative-ai";
 import { HOMEWORK_SOLVER_PROMPT } from "../utils/prompt.utils";
-import { AnalysisOutput } from "../types/analysisoutput.types";
+import { AnalysisOutput } from "../types/analysis-output.types";
 
 const GOOGLE_API_KEY: string = process.env.GOOGLE_API_KEY as string;
 if (!GOOGLE_API_KEY) {
