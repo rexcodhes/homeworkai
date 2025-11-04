@@ -5,7 +5,7 @@ import { enqueueAnalysisJob } from "../queues/analysis.queue";
 
 export async function runAnalysis(req: AuthenticatedRequest, res: Response) {
   const uploadId = req.params.uploadId;
-  if (!uploadId || uploadId !== "") {
+  if (!uploadId || uploadId === "") {
     return res
       .status(400)
       .json({ message: "uploadId is required", payload: "" });

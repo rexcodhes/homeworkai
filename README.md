@@ -1,269 +1,144 @@
 # HomeworkAI Backend
 
-An Express + TypeScript backend for an AI‑assisted homework solver. Users upload assignments (PDF), files are stored in S3‑compatible storage (MinIO), uploads are confirmed, parsed to text, and optionally analyzed with an LLM (Gemini 1.5). Results can be persisted for later retrieval and scaled as the product grows.
+TypeScript + Express API that powers the HomeworkAI experience: authenticated users upload PDFs, the backend parses them, runs Gemini for analysis, and can render the results back to PDF for distribution. Storage and queueing are designed to scale as workloads grow.
 
-## Overview
+## Tech Stack
 
-- API: Express (TypeScript), Zod validation
-- DB: PostgreSQL via Prisma
-- Object Storage: MinIO/S3 (AWS SDK v3)
-- Parsing: `pdf-parse`
-- LLM: Gemini 2.5 Pro (JSON mode with schema)
-- Rendering: `pdfkit` (export Slim analysis output to PDF and store in S3)
-- Background Jobs: BullMQ worker + Redis (analysis runs asynchronously)
+- **Runtime:** Node.js 18+, Express, Zod
+- **Persistence:** PostgreSQL (Prisma ORM)
+- **Object storage:** MinIO/S3 via AWS SDK v3
+- **LLM:** Google Gemini 2.5 (JSON mode)
+- **Rendering:** pdfkit (streamed PDF generation)
+- **Background jobs:** BullMQ worker + Redis (analysis queue)
 
-## Architecture
+## Key Features
 
-- Storage flow
-  - Presign → PUT (client → storage) → Confirm (HEAD) → Persist metadata
-- Parse flow
-  - GetObject → Buffer → `pdf-parse` → Persist `ParseResult` → Update `Upload.status`
-- Analyze flow
-  - (Async) Enqueue analysis job (BullMQ) → Worker processes and updates status/output
-  - Build spans from parsed text → LLM (Gemini) with strict JSON schema → Persist `AnalysisResult`
+- JWT authentication with registration/login flows (`/auth/register`, `/auth/login`)
+- User provisioning endpoint for internal tooling (`/users`)
+- Secure upload lifecycle: presign → client PUT → confirm metadata
+- PDF parsing to structured text with `pdf-parse`
+- LLM analysis producing a slim JSON schema and persisting results
+- PDF rendering of LLM output back into storage
+- BullMQ worker that processes queued analyses off the request path (must be running to finish analyses)
 
-### Data Model (Prisma)
+## Request Flow
 
-- `User`: optional owner of uploads
-- `Upload`: primary record per file; unique `(bucket,key)`; lifecycle state
-- `ParseResult`: 1:1 with `Upload`, stores extracted text and page count (optional)
-- `AnalysisResult`: N:1 with `Upload` (persist LLM output, status, optional usage/solution)
+1. **Authenticate:** client registers/logs in to receive a JWT.
+2. **Presign Upload:** `POST /api/v1/upload/presign` returns an S3 PUT URL plus `uploadId`.
+3. **Client Uploads File:** browser PUTs PDF directly to storage.
+4. **Confirm Upload:** `POST /api/v1/upload/confirm` validates object metadata and marks the upload as `uploaded`.
+5. **Parse:** `POST /api/v1/parse/:uploadId/parse` downloads the object, extracts text, and stores a `ParseResult`.
+6. **Analyze request:** `POST /api/v1/analyze/:uploadId` enqueues an analysis job (status `queued`) that the worker will process.
+7. **Worker executes:** the BullMQ worker pulls the job, calls Gemini, and updates the `AnalysisResult` with output/status.
+8. **Render:** `POST /api/v1/upload/:uploadId/analyses/:analysisId/render` validates the slim schema from a completed analysis, renders a PDF, and writes it back to storage.
+9. **Retrieve:** users can list uploads, fetch individual records, or pull analysis JSON after the worker finishes.
 
-Check `backend/prisma/schema.prisma` for the exact schema in your repo. If you recently added `AnalysisResult`, run migrations.
+## API Surface (summary)
+
+| Area    | Endpoint(s)                                                                                                                    | Notes                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Auth    | `POST /auth/register`, `POST /auth/login`                                                                                      | Zod-validated payloads, bcrypt hashing, JWT issuing   |
+| Users   | `POST /users`                                                                                                                  | Direct user creation by staff tools; hashes passwords |
+| Upload  | `POST /upload/presign`, `POST /upload/confirm`, `GET /upload/list`, `GET /upload/:uploadId`, `DELETE /upload/:uploadId/delete` | All require JWT; enforce ownership                    |
+| Parse   | `POST /parse/:uploadId/parse`                                                                                                  | Requires JWT, produces/updates `ParseResult`          |
+| Analyze | `POST /analyze/:uploadId`                                                                                                      | Enqueues job; worker runs Gemini and persists result  |
+| Render  | `POST /upload/:uploadId/analyses/:analysisId/render`                                                                           | Renders slim analysis to PDF                          |
+
+> All routes above are mounted under `/api/v1` in `backend/src/app.ts`.
 
 ## Project Structure
 
-- `backend/src/app.ts` — Express setup and route mounting
-- `backend/src/routes/*` — Route definitions (upload, parse, auth, analyze)
-- `backend/src/controller/*` — Controllers
-- `backend/src/service/*` — Storage, parse, LLM services
-- `backend/src/middleware/auth.middleware.ts` — Bearer JWT auth
-- `backend/src/db/prisma.db.ts` — Prisma client
-- `backend/src/utils/format.utils.ts` — Helpers (LLM input shaping)
-- `backend/prisma/schema.prisma` — Database schema
-
-## Prerequisites
-
-- Node.js 18+
-- PostgreSQL database
-- MinIO (or S3) instance and a bucket
-- Gemini API key
-- Redis instance (for BullMQ analysis worker; required if you run the worker)
+```
+backend/
+  src/
+    app.ts                    # Express bootstrap & route mounting
+    config/                   # Storage & Redis client setup
+    controller/               # HTTP controllers for auth/upload/parse/analyze/render
+    middleware/               # JWT auth middleware
+    processors/               # BullMQ job processors
+    queues/                   # Queue helper(s)
+    routes/                   # Express routers
+    schema/                   # Zod schemas
+    services/                 # LLM, parsing, rendering, storage helpers
+    utils/                    # Formatting + prompt helpers
+    workers/                  # BullMQ worker bootstrap
+  prisma/
+    schema.prisma             # Database schema
+```
 
 ## Environment Variables
 
-Copy and edit `backend/.env.example` → `backend/.env`.
+Create `backend/.env` using `backend/.env.example` as a template.
 
-Required values used by the codebase:
+| Category | Variables                                                                                                                                |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Server   | `PORT`, `NODE_ENV`                                                                                                                       |
+| Database | `DATABASE_URL`                                                                                                                           |
+| Auth     | `JWT_SECRET`                                                                                                                             |
+| Storage  | `STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`, `STORAGE_BUCKET`, `STORAGE_FORCE_PATH_STYLE` |
+| LLM      | `GOOGLE_API_KEY`                                                                                                                         |
+| Queue    | `REDIS_URL` _(required for the analysis queue/worker to complete jobs)_                                                                  |
 
-- Server: `PORT`, `NODE_ENV`
-- DB: `DATABASE_URL`
-- Auth: `JWT_SECRET`
-- Storage: `STORAGE_ENDPOINT`, `STORAGE_REGION`, `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY`, `STORAGE_BUCKET`, `STORAGE_FORCE_PATH_STYLE`
-- LLM: `GOOGLE_API_KEY`
-- Queue: `REDIS_URL` (Redis connection string for BullMQ worker)
+## Getting Started
 
-## Install & Run
+1. **Install dependencies**
+   ```bash
+   cd backend
+   npm install
+   ```
+2. **Database**
+   - Ensure Postgres is running and `DATABASE_URL` points to it.
+   - Generate and apply migrations:
+     ```bash
+     npx prisma migrate dev
+     npx prisma generate
+     ```
+3. **Storage**
+   - Start MinIO or configure AWS S3 credentials.
+   - Ensure the target bucket exists and matches `STORAGE_BUCKET`.
+4. **Run the API**
+   ```bash
+   npm run dev:api
+   ```
+   The server listens on `http://localhost:3000/api/v1` by default.
 
-1. Install dependencies
+## Background Analysis Worker
 
-- From `backend/`:
-  - `npm install`
+Long-running LLM analyses are handled asynchronously and require this worker to complete:
 
-2. Database
+1. Provide a Redis connection string via `REDIS_URL`.
+2. Start the worker in watch mode:
+   ```bash
+   npm run dev:worker
+   ```
+   Use `npm run build:worker` if you need a single-run execution.
 
-- Ensure `DATABASE_URL` is set
-- Generate client and run migrations:
-  - `npx prisma migrate dev`
-  - `npx prisma generate`
+The worker consumes BullMQ jobs using `backend/src/processors/analyze.processor.ts`, validates payloads with Zod, runs Gemini, and persists the finished JSON + status updates. Without Redis connectivity or the worker process, analyses will remain in the `queued` state.
 
-3. MinIO/S3
+## Operational Notes
 
-- Start MinIO (example):
-  - `minio server C:\\minio\\data --address :9000 --console-address :9090`
-- Ensure `STORAGE_*` envs are set and the bucket exists
-
-4. Start server
-
-- From `backend/`:
-  - Dev (TypeScript) with tsx: `npx tsx watch src/app.ts`
-    - or with ts-node-dev: `npx ts-node-dev --respawn --transpile-only src/app.ts`
-  - API base: `http://localhost:3000/api/v1`
-
-5. Analysis worker (async processing)
-
-Run the worker alongside the API. Both processes must load the same `.env` and use the same `REDIS_URL`.
-
-- Dev (TypeScript) with tsx: `npx tsx watch src/workers/analyze.worker.ts`
-- or with ts-node-dev: `npx ts-node-dev --respawn --transpile-only src/workers/analyze.worker.ts`
-- Production (from build):
-  - Build: `npx tsc`
-  - Run: `node dist/workers/analyze.worker.js`
-
-## Endpoints
-
-Auth
-
-- `POST /auth/register` → `{ message }` (Zod validation + bcrypt)
-- `POST /auth/login` → `{ token }` (payload contains `{ userId }`)
-
-Users
-
-- `POST /users` → `{ userId, name, email }` (direct user provisioning; hashes password)
-
-Upload (JWT required)
-
-- `POST /upload/presign` ? `{ uploadId, url, bucket, key, expiresAt }` (assigns `userId`)
-- `POST /upload/confirm` ? object metadata; enforces ownership; updates Upload to `uploaded`
-- `GET /upload/list` ? uploads owned by the user (includes parse/analyses)
-- `GET /upload/:uploadId` ? single upload (ownership enforced)
-- `DELETE /upload/:uploadId/delete` ? delete upload (ownership enforced)
-- `POST /upload/:uploadId/analyses/:analysisId/render` ? renders Slim output to PDF and stores back in storage
-
-Parse (JWT required)
-
-- `POST /parse/:uploadId/parse` → parses PDF, persists `ParseResult`
-
-Analyze (JWT required)
-
-- `POST /analyze/:uploadId` → builds spans, calls Gemini (JSON mode), persists `AnalysisResult`
-
-## Typical Flow (Postman)
-
-1. Presign
-
-- `POST /api/v1/upload/presign`
-- Body:
-  ```json
-  {
-    "filename": "sample.pdf",
-    "contentType": "application/pdf",
-    "folder": "inbox"
-  }
-  ```
-- Save `uploadId`, `url`, `bucket`, `key`
-
-2. Upload to storage
-
-- `PUT <url>` (from presign)
-- Headers: `Content-Type: application/pdf`
-- Body: binary PDF
-
-3. Confirm
-
-- `POST /api/v1/upload/confirm`
-- Body:
-  ```json
-  { "key": "<key>", "bucket": "<bucket>" }
-  ```
-
-4. Parse
-
-- `POST /api/v1/parse/<uploadId>/parse`
-- Expects success and creates `ParseResult`
-
-5. Login (for analyze)
-
-- `POST /api/v1/auth/login`
-- Body: `{ "email": "...", "password": "..." }`
-- Use returned `token` as `Authorization: Bearer <token>`
-
-6. Analyze (enqueue)
-
-- `POST /api/v1/analyze/<uploadId>` with `Authorization` header
-- Response: `200 { "message": "Analysis enqueued" }`
-
-7. Poll for analysis result
-
-- `GET /api/v1/upload/<uploadId>`
-- Inspect `upload.analyses[]` for items:
-  - `status`: `queued | running | completed | failed`
-  - `output`: JSON available when `completed`
-
-## Key Components
-
-Storage (`backend/src/config/storage.config.ts`, `backend/src/service/storage.service.ts`)
-
-- Configures S3 client for MinIO/S3
-- Presigned PUT for browser uploads
-- HEAD for confirmation
-
-Parsing (`backend/src/service/parse.service.ts`, `backend/src/controller/parse.controller.ts`)
-
-- Downloads object and buffers body
-- Uses `pdf-parse` correctly on a Buffer
-- Persists `ParseResult` via Prisma `upsert`
-
-LLM (`backend/src/service/analyze.service.ts`)
-
-- Gemini 2.5 Pro via `@google/generative-ai`
-- JSON mode with strict `responseSchema` (Slim output)
-- Returns parsed JSON used to persist `AnalysisResult`
-
-Render (`backend/src/controller/render.controller.ts`, `backend/src/service/render.service.ts`, `backend/src/schema/result.schema.ts`)
-
-- Validates Slim output, renders solution PDFs with `pdfkit`, and uploads them to storage
-
-Analyze (`backend/src/controller/analyze.controller.ts`, `backend/src/queues/analysis.queue.ts`)
-
-- Authenticated route (JWT)
-- Creates an `AnalysisResult` with status `queued` and enqueues a BullMQ job
-- Worker processes the job and updates status/output in the database
-
-Workers (`backend/src/workers/analyze.worker.ts`, `backend/src/processors/analyze.processor.ts`, `backend/src/schema/job.schema.ts`)
-
-- BullMQ + Redis worker to process queued analyses and enforce schema validation
-
-Auth (`backend/src/middleware/auth.middleware.ts`, `backend/src/controller/auth.controller.ts`)
-
-- Issues and verifies JWT containing `{ userId }`
-- Protects `/upload`, `/parse`, `/analyze` routes in `app.ts`
-
-## Scaling & Production Notes
-
-- Long PDFs / Context limits
-  - Use `utils/format` to cap per‑span length and total spans
-  - For very large docs, implement per‑question chunking and map/reduce analysis
-- Background jobs
-  - Move parsing and/or analysis to workers/queues (SQS/Redis) to avoid request timeouts
-  - Track job status on `AnalysisResult.status` (e.g., queued|running|completed|failed)
-- DB in serverless
-  - Use a pooled, serverless‑friendly Postgres (e.g., Neon) and consider Prisma Accelerate/Data Proxy
-- Storage
-  - Keep `STORAGE_FORCE_PATH_STYLE=true` for MinIO; for AWS S3, you can disable it
-  - Consider idempotent presign via upsert on `(bucket,key)` if clients retry
-- LLM cost/latency
-  - Default to `gemini-1.5-flash` for throughput, switch to `-pro` for complex cases
-  - Add a one‑retry loop on invalid JSON with a short repair instruction
-- Security
-  - Enforce owner checks (`upload.userId === req.user.userId`) across confirm/get/delete/parse/analyze
-  - Validate request bodies with Zod everywhere
-  - Do not log secrets; rotate keys regularly
+- **Parsing & Analysis:** All LLM inputs are shaped via `makeLLMInputFromText`; ensure extracted spans stay within Gemini context limits.
+- **Rendering:** The render controller trusts only JSON that passes `resultSchema` before emitting PDFs.
+- **Security:** Ownership checks are enforced on upload, parse, analyze, and render routes; JWT payloads carry `userId`.
+- **Observability:** Console logs exist for LLM prompts/results—tighten or replace with structured logging in production.
 
 ## Troubleshooting
 
-- 401 on analyze: ensure `Authorization: Bearer <token>` and JWT payload uses `userId` consistently
-- 403 signature mismatch on PUT: ensure `Content-Type` matches presign exactly
-- 404 parse/analyze: verify `uploadId` and that parsing was performed
-- Prisma type errors after schema edits: run `npx prisma generate`
-- Worker fails to start: confirm `REDIS_URL` is set and Redis is reachable
-
-## Future Work
-
-- Expand solution PDF rendering (additional templates, downloads, sharing)
-- Add GET endpoints to fetch latest analysis and/or presigned downloads
-- Harden user registration and ownership enforcement across flows
-- Observability: structured logs, metrics, tracing
-- Rate limits and quotas per user
+- `401 Unauthorized`: confirm JWT in `Authorization: Bearer <token>`.
+- `403 Forbidden`: upload or analysis belongs to a different user.
+- `404 Parse/Analyze`: make sure parsing completed before triggering analysis/render.
+- `Invalid LLM output`: Gemini must emit strict JSON; the worker/controller surfaces schema errors.
+- Analyses stuck in `queued`: ensure Redis is reachable and the worker is running.
 
 ## Scripts
 
-From `backend/`:
+- `npm run dev:api` – start the API with `tsx` in watch mode
+- `npm run dev:worker` – start the BullMQ worker with `tsx` watch
+- `npm run build:api` – run the API entrypoint once (useful for prod builds/tests)
+- `npm run build:worker` – run the worker entrypoint once
+- `npx prisma migrate dev` – apply schema changes locally
+- `npx prisma generate` – regenerate Prisma client
 
-- `npm run dev` — start server (nodemon)
-- `npx prisma migrate dev` — apply migrations
-- `npx prisma generate` — regenerate Prisma client
+---
 
-## License
-
-Proprietary (adjust to your needs). Do not commit secrets.
+Proprietary – adjust licensing and distribution terms as required.
